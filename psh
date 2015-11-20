@@ -1,0 +1,87 @@
+#!/bin/bash
+
+# psh -- parallel shells
+
+psh () {
+    local command=
+    local debug=
+    local machine=
+    local machines=
+    local open=
+    local opt=
+    local pane=
+    local split=
+    local title=
+    local tmux_title=
+
+    while getopts "dm:op:r:" opt ; do
+        case $opt in
+            d) debug=true ;;
+            m) split=$(echo $OPTARG | tr , " ") ; machines="$machines $split" ;;
+            o) open=true ;;
+            p) pane=$OPTARG ;;
+            \?) echo "usage: ${0##*/} [-d] [-p PANENAME] [-m MACHINE1,MACHINE2] [command arg1 arg2]" >&2 ;;
+        esac
+    done
+    shift $((OPTIND - 1)) ; OPTIND=1
+
+    if [ -z "$machines" ] ; then
+        echo "which hosts?" >&2
+        echo "usage: ${0##*/} [-d] [-p PANENAME] [-m MACHINE1,MACHINE2] [command arg1 arg2]" >&2
+        false
+    fi
+
+    command="$@"
+    if [ -n "$command" -a -n "$open" ] ; then
+        # provide login shell upon completion of requested command
+        command="$command ; exec /bin/bash -l"
+    fi
+
+    for machine in $machines ; do
+        title=${machine%.prod*}
+        title=${title%.corp*}
+        title=${title%.stg*}
+
+        if [ -n "$debug" ] ; then
+            echo "ssh -t $title \"$command\""
+            continue
+        fi
+
+        if [ -n "$TMUX" ] ; then
+            if [ -n "$pane" ] ; then
+                if [ -z "$tmux_title" ] ; then
+                    tmux_title=$pane
+                    tmux new-window -n $tmux_title "ssh -t $machine \"$command\""
+                    tmux set-window-option synchronize-panes on
+                else
+                    tmux split-window -p 50 -t $tmux_title "ssh -t $machine \"$command\""
+                    tmux select-layout -t $tmux_title tiled
+                fi
+            else
+                tmux new-window -n "$title" "ssh -t $machine \"$command\""
+                tmux last-window
+            fi
+        elif [ "$TERM" == "screen" ] ; then
+            screen -t "$title" ssh -t $machine "$command"
+        elif [ "$TERM_PROGRAM" == "Apple_Terminal" ] ; then
+            osascript \
+                -e "tell application \"Terminal\"" \
+                -e "tell application \"System Events\" to keystroke \"t\" using {command down}" \
+                -e "do script \"ssh -t $machine \\\"$command\\\"\" in front window" \
+                -e "end tell" > /dev/null
+        elif [ "$TERM_PROGRAM" == "iTerm.app" ] ; then
+            osascript \
+                -e "tell application \"iTerm\"" \
+                -e "tell application \"System Events\" to keystroke \"t\" using {command down}" \
+                -e "tell application \"iTerm\" to tell session -1 of current terminal to write text \"ssh -t $machine \\\"$command\\\"\"" \
+                -e "end tell" > /dev/null
+        else
+            ssh -t $machine "$command"
+        fi
+    done
+}
+
+case $# in
+    0) : OK ;;
+    *) psh "$@" ;;
+esac
