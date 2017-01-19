@@ -5,61 +5,66 @@
 psh () {
     local command=
     local debug=
+    local error=
     local machine=
     local machines=
     local open=
     local opt=
     local pane=
-    local split=
+    local target=
     local title=
-    local tmux_title=
 
-    while getopts "dm:op:r:" opt ; do
+    while getopts ":c:dm:op:" opt ; do
         case $opt in
+            c) cut=$OPTARG ;;
             d) debug=true ;;
-            m) split=$(echo $OPTARG | tr , " ") ; machines="$machines $split" ;;
+            m) machines="$machines $(tr , " " <<< $OPTARG)" ;;
             o) open=true ;;
             p) pane=$OPTARG ;;
-            \?) echo "usage: ${0##*/} [-d] [-p PANENAME] [-m MACHINE1,MACHINE2] [command arg1 arg2]" >&2 ;;
+            :) error="missing required argument for option: -$OPTARG" ;;
+            \?) error="illegal option: $OPTARG" ;;
         esac
     done
     shift $((OPTIND - 1)) ; OPTIND=1
 
-    if [ -z "$machines" ] ; then
-        echo "which hosts?" >&2
-        echo "usage: ${0##*/} [-d] [-p PANENAME] [-m MACHINE1,MACHINE2] [command arg1 arg2]" >&2
-        false
+    if [ -z "$error" -a -z "$machines" ] ; then
+        error="which hosts?"
+    fi
+
+    if [ -n "$error" ] ; then
+        echo >&2 $error
+        echo >&2 "usage: ${0##*/} [-d] [-o] [-m MACHINE1,MACHINE2] [-p PANENAME] [command arg1 arg2]"
+        return 2
     fi
 
     command="$@"
-    if [ -n "$command" -a -n "$open" ] ; then
-        # provide login shell upon completion of requested command
+
+    if [ $# -gt 0 -a -n "$open" ] ; then
+        # user requests a login shell upon completion of requested command
         command="$command ; exec /bin/bash -l"
     fi
 
     for machine in $machines ; do
-        title=${machine%.prod*}
-        title=${title%.corp*}
-        title=${title%.stg*}
-
         if [ -n "$debug" ] ; then
-            echo "ssh -t $title \"$command\""
+            echo "ssh -t $machine \"$command\""
             continue
         fi
 
+        title=${machine%$cut} # remove optionally specified suffix from machine name
+
         if [ -n "$TMUX" ] ; then
             if [ -n "$pane" ] ; then
-                if [ -z "$tmux_title" ] ; then
-                    tmux_title=$pane
-                    tmux new-window -n $tmux_title "ssh -t $machine \"$command\""
-                    tmux set-window-option synchronize-panes on
-                else
-                    tmux split-window -p 50 -t $tmux_title "ssh -t $machine \"$command\""
-                    tmux select-layout -t $tmux_title tiled
+                if [ -z "$target" ] ; then
+                    # create new window, saving target name
+                    target=$(tmux new-window -P -c $HOME -d -n $pane ssh -t $machine "$command")
+                    tmux set-option -t $target -w synchronize-panes on
+                elif ! tmux split-window -c $HOME -t $target ssh -t $machine "$command" 2>/dev/null ; then
+                    # NOTE: cannot split-window when too small, so re-tile panes in window and try again
+                    tmux select-layout -t $target tiled
+                    tmux split-window -c $HOME -t $target ssh -t $machine "$command"
                 fi
             else
-                tmux new-window -n "$title" "ssh -t $machine \"$command\""
-                tmux last-window
+                tmux new-window -c $HOME -d -n "$title" ssh -t $machine "$command"
             fi
         elif [ "$TERM" == "screen" ] ; then
             screen -t "$title" ssh -t $machine "$command"
@@ -79,9 +84,14 @@ psh () {
             ssh -t $machine "$command"
         fi
     done
+
+    if [ -z "$debug" -a -n "$TMUX" -a -n "$pane" ] ; then
+        # NOTE: Re-tile the panes in the tmux window
+        tmux select-layout -t $target tiled
+    fi
 }
 
 case $# in
-    0) : OK ;;
+    0) : ;;
     *) psh "$@" ;;
 esac
