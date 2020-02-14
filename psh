@@ -61,6 +61,7 @@ psh () {
                 elif ! tmux split-window -c $HOME -t $target ssh -t $machine "$command" 2>/dev/null ; then
                     # NOTE: cannot split-window when too small, so re-tile panes in window and try again
                     tmux select-layout -t $target tiled
+                    sleep 0.3
                     tmux split-window -c $HOME -t $target ssh -t $machine "$command"
                 fi
             else
