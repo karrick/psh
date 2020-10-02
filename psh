@@ -67,8 +67,12 @@ psh () {
             else
                 tmux new-window -c $HOME -d -n "$title" ssh -t $machine "$command"
             fi
-        elif [ "$TERM" == "screen" ] ; then
-            screen -t "$title" ssh -t $machine "$command"
+        elif [[ ${TERM} =~ screen.* ]]; then
+            if [ -n "$pane" ] ; then
+                screen -t "${pane}${title}" ssh -t $machine "$command"
+            else
+                screen -t "$title" ssh -t $machine "$command"
+            fi
         elif [ "$TERM_PROGRAM" == "Apple_Terminal" ] ; then
             osascript \
                 -e "tell application \"Terminal\"" \
