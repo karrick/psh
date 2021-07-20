@@ -3,6 +3,7 @@
 # psh -- parallel shells
 
 psh () {
+    local cut=
     local command=
     local debug=
     local error=
