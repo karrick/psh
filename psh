@@ -77,8 +77,8 @@ psh () {
         elif [ "$TERM_PROGRAM" == "Apple_Terminal" ] ; then
             osascript \
                 -e "tell application \"Terminal\"" \
-                -e "tell application \"System Events\" to keystroke \"t\" using {command down}" \
-                -e "do script \"ssh -t $machine \\\"$command\\\"\" in front window" \
+                -e "  tell application \"System Events\" to keystroke \"t\" using {command down}" \
+                -e "  do script \"ssh -t $machine \\\"$command\\\"\" in front window" \
                 -e "end tell" > /dev/null
         elif [ "$TERM_PROGRAM" == "iTerm.app" ] ; then
             if [ -n "$pane" ] ; then
