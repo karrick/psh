@@ -2,6 +2,12 @@
 
 parallel shell
 
+*DEPRECATED*
+
+Please consider using [mtsh](https://github.com/karrick/mtsh) instead,
+as it has a more friendly and intuitive command line interface, while
+supporting all of the useful options of this tool.
+
 ## Description
 
 Parallel shell launches remote ssh shells to multiple hosts. It is
